@@ -14,49 +14,40 @@ namespace WorkTimeTest
             var foundation = new TaskWork("Foundation", 5);
 
             var wall_1 = new TaskWork("Wall 1", 3);
-            wall_1.TasksToWaitFor.Add(foundation);
-            foundation.NextTasks.Add(wall_1);
-
             var wall_2 = new TaskWork("Wall 2", 3);
-            wall_2.TasksToWaitFor.Add(foundation);
-            foundation.NextTasks.Add(wall_2);
-
             var wall_3 = new TaskWork("Wall 3", 3);
-            wall_1.TasksToWaitFor.Add(foundation);
-            foundation.NextTasks.Add(wall_3);
-
             var wall_4 = new TaskWork("Wall 4", 3);
-            wall_1.TasksToWaitFor.Add(foundation);
-            foundation.NextTasks.Add(wall_4);
+
+            foundation.AddNextTaskWork(wall_1);
+            foundation.AddNextTaskWork(wall_2);
+            foundation.AddNextTaskWork(wall_3);
+            foundation.AddNextTaskWork(wall_4);
 
             var door = new TaskWork("Door", 2);
-            door.TasksToWaitFor.Add(wall_1);
-            wall_1.NextTasks.Add(door);
+
+            wall_1.AddNextTaskWork(door);
 
             var window_1 = new TaskWork("Window 1", 1);
-            window_1.TasksToWaitFor.Add(wall_2);
-            wall_2.NextTasks.Add(window_1);
-
             var window_2 = new TaskWork("Window 2", 1);
-            window_2.TasksToWaitFor.Add(wall_3);
-            wall_3.NextTasks.Add(window_2);
-
             var window_3 = new TaskWork("Window 3", 1);
-            window_3.TasksToWaitFor.Add(wall_3);
-            wall_3.NextTasks.Add(window_3);
+
+            wall_2.AddNextTaskWork(window_1);
+            wall_3.AddNextTaskWork(window_2);
+            wall_3.AddNextTaskWork(window_3);
 
             var roof = new TaskWork("Roof", 4);
-            roof.TasksToWaitFor.Add(window_1);
-            roof.TasksToWaitFor.Add(window_2);
-            roof.TasksToWaitFor.Add(window_3);
-            roof.TasksToWaitFor.Add(door);
-            window_1.NextTasks.Add(roof);
-            window_2.NextTasks.Add(roof);
-            window_3.NextTasks.Add(roof);
-            door.NextTasks.Add(roof);
+         
+            door.AddNextTaskWork(roof);
+            window_1.AddNextTaskWork(roof);
+            window_2.AddNextTaskWork(roof);
+            window_3.AddNextTaskWork(roof);
+            wall_4.AddNextTaskWork(roof);
+
             roof.EnableWorkEndNotify();
 
             Stopwatch sw = new Stopwatch();
+
+            // Иногда не запускается постройка крыши (roof)
 
             sw.Start();
 
@@ -70,75 +61,13 @@ namespace WorkTimeTest
         }
     }
 
-    class BuildObject
-    {
-        public string ObjectName;
-        public int BuildTime;
-
-        public bool IsBuildingStarted;
-
-        public ManualResetEvent BuildFinishedEvent;
-
-        public List<BuildObject> ObjectsToWaitFor;
-        public List<BuildObject> NextObjects = new List<BuildObject>();
-
-        public BuildObject(string objectName, int buildTime, List<BuildObject> objectsToWaitFor = null)
-        {
-            ObjectName = objectName;
-            BuildTime = buildTime;
-            IsBuildingStarted = false;
-            ObjectsToWaitFor = objectsToWaitFor ?? new List<BuildObject>();
-            BuildFinishedEvent = new ManualResetEvent(false);
-        }
-
-        public void StartBuilding()
-        {
-            IsBuildingStarted = true;
-
-            foreach (var waitObject in ObjectsToWaitFor)
-            {
-                if (!waitObject.BuildFinishedEvent.WaitOne())
-                {
-                    Console.WriteLine("Wait for {0} to build...", waitObject.ObjectName);
-                }
-            }
-
-            Console.WriteLine();
-            Console.WriteLine("Start building " + ObjectName);
-
-            var t = Task.Run(() => Build());
-            
-        }
-
-        private void Build()
-        {
-            for (int i = 0; i < BuildTime; i++)
-            {
-                Console.WriteLine("Building {0}. {1} hours left...", ObjectName, BuildTime - i);
-                Thread.Sleep(1000);
-            }
-
-            Console.WriteLine("Bulding {0} was finished!", ObjectName);
-
-            BuildFinishedEvent.Set();
-
-            foreach (var nextObject in NextObjects)
-            {
-                if (!nextObject.IsBuildingStarted)
-                {
-                    nextObject.StartBuilding();
-                }
-            }
-        }
-    }
-
     class TaskWork
     {
         public readonly string Name;
         public readonly int TaskTime;
 
         public Task Work;
-        public bool WorkStarted;
+        public bool WorkStarted { get; set; }
 
         public AutoResetEvent WorkEnded;
 
@@ -157,6 +86,12 @@ namespace WorkTimeTest
             TaskTime = taskTime;
         }
 
+        public void AddNextTaskWork(TaskWork nextTaskWork)
+        {
+            NextTasks.Add(nextTaskWork);
+            nextTaskWork.TasksToWaitFor.Add(this);
+        }
+
         public void EnableWorkEndNotify()
         {
             WorkEnded = new AutoResetEvent(false);
@@ -164,13 +99,14 @@ namespace WorkTimeTest
 
         public void TriggerWork()
         {
-            if (WorkStarted)
-                return;
+            Console.WriteLine("{0} triggered. State: {1}", Name, WorkStarted); 
+
+            if (WorkStarted)             
+                return;                               
             else
                 WorkStarted = true;
 
-            Task.WhenAll(TasksToWaitFor.Select(taskWork => taskWork.Work))
-                .ContinueWith(_ => StartWork());              
+           Task.WhenAll(TasksToWaitFor.Select(taskWork => taskWork.Work)).ContinueWith(_ => StartWork());              
         }
 
         public void StartWork()
