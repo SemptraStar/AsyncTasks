@@ -10,7 +10,7 @@ namespace WorkTimeTest
     class Program
     {
         static void Main(string[] args)
-        {
+        {   
             var foundation = new TaskWork("Foundation", 5);
 
             var wall_1 = new TaskWork("Wall 1", 3);
@@ -44,10 +44,9 @@ namespace WorkTimeTest
             wall_4.AddNextTaskWork(roof);
 
             roof.EnableWorkEndNotify();
+            
 
             Stopwatch sw = new Stopwatch();
-
-            // Иногда не запускается постройка крыши (roof)
 
             sw.Start();
 
@@ -67,7 +66,7 @@ namespace WorkTimeTest
         public readonly int TaskTime;
 
         public Task Work;
-        public bool WorkStarted { get; set; }
+        public bool WorkStarted;
 
         public AutoResetEvent WorkEnded;
 
@@ -99,14 +98,14 @@ namespace WorkTimeTest
 
         public void TriggerWork()
         {
-            Console.WriteLine("{0} triggered. State: {1}", Name, WorkStarted); 
+            var taskWorksToWaitFor = TasksToWaitFor.Select(taskWork => taskWork.Work);
 
-            if (WorkStarted)             
-                return;                               
-            else
-                WorkStarted = true;
+            if (taskWorksToWaitFor.Contains(null))
+                return;
 
-           Task.WhenAll(TasksToWaitFor.Select(taskWork => taskWork.Work)).ContinueWith(_ => StartWork());              
+            WorkStarted = true;
+
+            Task.WhenAll(taskWorksToWaitFor).ContinueWith(_ => StartWork());     
         }
 
         public void StartWork()
@@ -126,7 +125,11 @@ namespace WorkTimeTest
             {
                 WorkEnded?.Set();
 
-                NextTasks.ForEach(taskWork => taskWork.TriggerWork());
+                NextTasks.ForEach(taskWork => 
+                {
+                    if (!taskWork.WorkStarted)                                     
+                        taskWork.TriggerWork();                                        
+                });
             });          
         }
     }
